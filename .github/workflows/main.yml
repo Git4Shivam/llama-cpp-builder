@@ -14,13 +14,16 @@ jobs:
         uses: Jimver/cuda-toolkit@v0.2.17
         with:
           cuda: '12.1.0'
+
+      - name: Setup MSVC Compiler
+        uses: ilammy/msvc-dev-cmd@v1
           
       - name: Install Build Dependencies
         run: pip install wheel setuptools cmake scikit-build-core
         
       - name: Compile Wheel (No AVX)
         env:
-          CMAKE_ARGS: "-DLLAMA_AVX2=OFF -DLLAMA_AVX=OFF -DLLAMA_F16C=OFF -DLLAMA_FMA=OFF -DLLAMA_CUDA=on"
+          CMAKE_ARGS: "-DGGML_AVX2=OFF -DGGML_AVX=OFF -DGGML_F16C=OFF -DGGML_FMA=OFF -DGGML_CUDA=on"
           FORCE_CMAKE: "1"
         run: pip wheel llama-cpp-python==0.3.20
         
