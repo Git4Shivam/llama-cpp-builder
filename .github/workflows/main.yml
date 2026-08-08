@@ -1,6 +1,5 @@
 name: Build No-AVX Wheel
 on: workflow_dispatch
-
 jobs:
   build:
     runs-on: windows-latest
@@ -34,8 +33,10 @@ jobs:
           if (-not $cudaPath) {
             $cudaPath = "C:\Program Files\NVIDIA GPU Computing Toolkit\CUDA\v12.1"
           }
+          if (-not (Test-Path $cudaPath)) {
+            throw "CUDA_PATH '$cudaPath' does not exist — CUDA toolkit setup may have failed."
+          }
           Write-Host "Using CUDA_PATH: $cudaPath"
-          # Use Add-Content to avoid adding a UTF-8 BOM to the env files
           Add-Content -Path $env:GITHUB_ENV -Value "CUDA_PATH=$cudaPath"
           Add-Content -Path $env:GITHUB_ENV -Value "CUDA_HOME=$cudaPath"
           Add-Content -Path $env:GITHUB_PATH -Value "$cudaPath\bin"
@@ -58,31 +59,38 @@ jobs:
         shell: pwsh
         run: |
           cmake --version
-          # cl.exe prints help when invoked with no args; ensure it exists
-          & cl.exe /?
+          $clPath = Get-Command cl.exe -ErrorAction SilentlyContinue
+          if (-not $clPath) {
+            throw "cl.exe not found on PATH — MSVC environment setup failed."
+          }
+          Write-Host "Found cl.exe at: $($clPath.Source)"
 
       - name: Compile Wheel (No AVX) and build with CUDA
         shell: pwsh
         env:
-          # Quoted CMAKE_ARGS; GGML_CUDA=ON, architectures as semicolon-separated string
-          CMAKE_ARGS: "-DGGML_AVX2=OFF -DGGML_AVX=OFF -DGGML_F16C=OFF -DGGML_FMA=OFF -DGGML_CUDA=ON -DGGML_CUDA_ARCHITECTURES=70;75;80;86"
+          # RTX 3060 = Ampere = compute capability 86. Trimmed from the
+          # original multi-arch list (70;75;80;86) to cut build time,
+          # since this wheel only needs to run on a 3060.
+          CMAKE_ARGS: "-DGGML_AVX2=OFF -DGGML_AVX=OFF -DGGML_F16C=OFF -DGGML_FMA=OFF -DGGML_CUDA=ON -DGGML_CUDA_ARCHITECTURES=86"
           FORCE_CMAKE: "1"
-          # Use the CUDA_PATH output to set CUDACXX instead of a hard-coded path
           CUDACXX: "${{ steps.cuda-toolkit.outputs.CUDA_PATH }}\\bin\\nvcc.exe"
         run: |
-          # Build the wheel for the llama-cpp-python version you want.
-          # If you need to build against the repository checkout instead, replace the pip wheel line
-          # with: python -m pip wheel . --verbose
-          python -m pip wheel llama-cpp-python==0.3.20 --verbose
+          # --no-deps so pip doesn't also build wheels for every dependency
+          # (numpy, diskcache, etc.) — keeps the artifact upload clean.
+          python -m pip wheel llama-cpp-python==0.3.20 --no-deps --verbose
 
       - name: List created artifacts
         shell: pwsh
         run: |
           Write-Host "Created wheel files:"
-          Get-ChildItem -Name *.whl -ErrorAction SilentlyContinue || Write-Host "No .whl files found"
+          $wheels = Get-ChildItem -Name "llama_cpp_python-*.whl" -ErrorAction SilentlyContinue
+          if (-not $wheels) {
+            throw "No llama_cpp_python wheel found — build likely failed."
+          }
+          $wheels
 
       - name: Upload Finished Wheel
         uses: actions/upload-artifact@v4
         with:
           name: custom-llama-wheel
-          path: "*.whl"
+          path: "llama_cpp_python-*.whl"
