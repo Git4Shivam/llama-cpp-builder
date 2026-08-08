@@ -5,52 +5,82 @@ jobs:
   build:
     runs-on: windows-latest
     steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
       - name: Set up Python 3.12
         uses: actions/setup-python@v5
         with:
           python-version: '3.12'
-          
+
+      - name: Upgrade pip and core build tools
+        run: python -m pip install --upgrade pip setuptools wheel build
+
       - name: Setup CUDA 12.1
         uses: Jimver/cuda-toolkit@v0.2.17
         id: cuda-toolkit
         with:
           cuda: '12.1.0'
 
-      - name: Setup MSVC Compiler
+      - name: Setup MSVC Compiler environment
         uses: ilammy/msvc-dev-cmd@v1
         with:
           arch: x64
 
-      - name: Set CUDA Environment Variables
+      - name: Set CUDA environment variables (safe append)
         shell: pwsh
         run: |
           $cudaPath = "${{ steps.cuda-toolkit.outputs.CUDA_PATH }}"
           if (-not $cudaPath) {
             $cudaPath = "C:\Program Files\NVIDIA GPU Computing Toolkit\CUDA\v12.1"
           }
-          echo "CUDA_PATH=$cudaPath" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
-          echo "CUDA_HOME=$cudaPath" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
-          echo "$cudaPath\bin" | Out-File -FilePath $env:GITHUB_PATH -Encoding utf8 -Append
+          Write-Host "Using CUDA_PATH: $cudaPath"
+          # Use Add-Content to avoid adding a UTF-8 BOM to the env files
+          Add-Content -Path $env:GITHUB_ENV -Value "CUDA_PATH=$cudaPath"
+          Add-Content -Path $env:GITHUB_ENV -Value "CUDA_HOME=$cudaPath"
+          Add-Content -Path $env:GITHUB_PATH -Value "$cudaPath\bin"
 
-      - name: Verify CUDA Installation
+      - name: Verify nvcc and environment
         shell: pwsh
-        run: nvcc --version
+        run: |
+          Write-Host "CUDA_PATH=$env:CUDA_PATH"
+          Write-Host "PATH (first 200 chars): $($env:PATH.Substring(0,[math]::Min(200,$env:PATH.Length)))"
+          nvcc --version
 
-      - name: Clean CMake Cache
+      - name: Clean CMake cache
         shell: pwsh
         run: Remove-Item -Recurse -Force -ErrorAction SilentlyContinue "build"
-          
-      - name: Install Build Dependencies
-        run: pip install wheel setuptools cmake scikit-build-core ninja
-        
-      - name: Compile Wheel (No AVX)
+
+      - name: Install build dependencies
+        run: python -m pip install wheel setuptools cmake scikit-build-core ninja
+
+      - name: Show CMake & MSVC versions
+        shell: pwsh
+        run: |
+          cmake --version
+          # cl.exe prints help when invoked with no args; ensure it exists
+          & cl.exe /?
+
+      - name: Compile Wheel (No AVX) and build with CUDA
         shell: pwsh
         env:
-          CMAKE_ARGS: "-DGGML_AVX2=OFF -DGGML_AVX=OFF -DGGML_F16C=OFF -DGGML_FMA=OFF -DGGML_CUDA=on -DGGML_CUDA_ARCHITECTURES=70;75;80;86"
+          # Quoted CMAKE_ARGS; GGML_CUDA=ON, architectures as semicolon-separated string
+          CMAKE_ARGS: "-DGGML_AVX2=OFF -DGGML_AVX=OFF -DGGML_F16C=OFF -DGGML_FMA=OFF -DGGML_CUDA=ON -DGGML_CUDA_ARCHITECTURES=70;75;80;86"
           FORCE_CMAKE: "1"
-          CUDACXX: "C:\\Program Files\\NVIDIA GPU Computing Toolkit\\CUDA\\v12.1\\bin\\nvcc.exe"
-        run: pip wheel llama-cpp-python==0.3.20 --verbose
-        
+          # Use the CUDA_PATH output to set CUDACXX instead of a hard-coded path
+          CUDACXX: "${{ steps.cuda-toolkit.outputs.CUDA_PATH }}\\bin\\nvcc.exe"
+        run: |
+          # Build the wheel for the llama-cpp-python version you want.
+          # If you need to build against the repository checkout instead, replace the pip wheel line
+          # with: python -m pip wheel . --verbose
+          python -m pip wheel llama-cpp-python==0.3.20 --verbose
+
+      - name: List created artifacts
+        shell: pwsh
+        run: |
+          Write-Host "Created wheel files:"
+          Get-ChildItem -Name *.whl -ErrorAction SilentlyContinue || Write-Host "No .whl files found"
+
       - name: Upload Finished Wheel
         uses: actions/upload-artifact@v4
         with:
