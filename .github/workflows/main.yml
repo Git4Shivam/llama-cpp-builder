@@ -24,8 +24,6 @@ jobs:
           Write-Host "Downloading CUDA network installer..."
           Invoke-WebRequest -Uri $installerUrl -OutFile $installerPath
 
-          # Only install the subset of components needed to build with nvcc +
-          # cuBLAS, instead of the full toolkit (much faster than 'local' installers).
           $components = "nvcc_12.6 cudart_12.6 cublas_12.6 cublas_dev_12.6 visual_studio_integration_12.6"
           Write-Host "Installing CUDA components: $components"
           Start-Process -FilePath $installerPath -ArgumentList "-s $components" -Wait -NoNewWindow
@@ -82,7 +80,7 @@ jobs:
           Write-Host "Forcing CMAKE_MAKE_PROGRAM to: $ninjaExe"
 
           $env:CMAKE_GENERATOR = "Ninja"
-          $env:CMAKE_ARGS = "-DGGML_AVX2=OFF -DGGML_AVX=OFF -DGGML_F16C=OFF -DGGML_FMA=OFF -DGGML_CUDA=ON -DGGML_CUDA_ARCHITECTURES=86 -DCMAKE_MAKE_PROGRAM=`"$ninjaExe`""
+          $env:CMAKE_ARGS = "-DGGML_AVX2=OFF -DGGML_AVX=OFF -DGGML_F16C=OFF -DGGML_FMA=OFF -DGGML_CUDA=ON -DGGML_CUDA_ARCHITECTURES=86 -DCMAKE_MAKE_PROGRAM=`"$ninjaExe`" -DCMAKE_CUDA_FLAGS=`"-allow-unsupported-compiler`""
           $env:FORCE_CMAKE = "1"
           $env:CUDACXX = "$env:CUDA_PATH\bin\nvcc.exe"
 
