@@ -20,6 +20,7 @@ jobs:
         id: cuda-toolkit
         with:
           cuda: '12.6.3'
+          use-github-cache: false
 
       - name: Setup MSVC Compiler environment
         uses: ilammy/msvc-dev-cmd@v1
