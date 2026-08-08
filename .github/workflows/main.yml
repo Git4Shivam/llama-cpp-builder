@@ -17,6 +17,14 @@ jobs:
 
       - name: Setup MSVC Compiler
         uses: ilammy/msvc-dev-cmd@v1
+
+      - name: Set CUDA Environment Variables
+        shell: pwsh
+        run: |
+          $cudaPath = "C:\Program Files\NVIDIA GPU Computing Toolkit\CUDA\v12.1"
+          echo "CUDA_PATH=$cudaPath" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+          echo "CUDA_HOME=$cudaPath" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+          echo "$cudaPath\bin" | Out-File -FilePath $env:GITHUB_PATH -Encoding utf8 -Append
           
       - name: Install Build Dependencies
         run: pip install wheel setuptools cmake scikit-build-core ninja
