@@ -55,42 +55,8 @@ jobs:
       - name: Install build dependencies
         run: python -m pip install wheel setuptools cmake scikit-build-core ninja
 
-      - name: Show CMake & MSVC versions
+      - name: Show CMake, Ninja & MSVC versions
         shell: pwsh
         run: |
           cmake --version
-          $clPath = Get-Command cl.exe -ErrorAction SilentlyContinue
-          if (-not $clPath) {
-            throw "cl.exe not found on PATH — MSVC environment setup failed."
-          }
-          Write-Host "Found cl.exe at: $($clPath.Source)"
-
-      - name: Compile Wheel (No AVX) and build with CUDA
-        shell: pwsh
-        env:
-          # RTX 3060 = Ampere = compute capability 86. Trimmed from the
-          # original multi-arch list (70;75;80;86) to cut build time,
-          # since this wheel only needs to run on a 3060.
-          CMAKE_ARGS: "-DGGML_AVX2=OFF -DGGML_AVX=OFF -DGGML_F16C=OFF -DGGML_FMA=OFF -DGGML_CUDA=ON -DGGML_CUDA_ARCHITECTURES=86"
-          FORCE_CMAKE: "1"
-          CUDACXX: "${{ steps.cuda-toolkit.outputs.CUDA_PATH }}\\bin\\nvcc.exe"
-        run: |
-          # --no-deps so pip doesn't also build wheels for every dependency
-          # (numpy, diskcache, etc.) — keeps the artifact upload clean.
-          python -m pip wheel llama-cpp-python==0.3.20 --no-deps --verbose
-
-      - name: List created artifacts
-        shell: pwsh
-        run: |
-          Write-Host "Created wheel files:"
-          $wheels = Get-ChildItem -Name "llama_cpp_python-*.whl" -ErrorAction SilentlyContinue
-          if (-not $wheels) {
-            throw "No llama_cpp_python wheel found — build likely failed."
-          }
-          $wheels
-
-      - name: Upload Finished Wheel
-        uses: actions/upload-artifact@v4
-        with:
-          name: custom-llama-wheel
-          path: "llama_cpp_python-*.whl"
+          ninja
