@@ -15,32 +15,34 @@ jobs:
       - name: Upgrade pip and core build tools
         run: python -m pip install --upgrade pip setuptools wheel build
 
-      - name: Setup CUDA 12.6
-        uses: Jimver/cuda-toolkit@v0.2.26
-        id: cuda-toolkit
-        with:
-          cuda: '12.6.3'
-          use-github-cache: false
+      - name: Install CUDA 12.6 (direct, no third-party action)
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = "Stop"
+          $installerUrl = "https://developer.download.nvidia.com/compute/cuda/12.6.3/network_installers/cuda_12.6.3_windows_network.exe"
+          $installerPath = "$env:TEMP\cuda_installer.exe"
+          Write-Host "Downloading CUDA network installer..."
+          Invoke-WebRequest -Uri $installerUrl -OutFile $installerPath
+
+          # Only install the subset of components needed to build with nvcc +
+          # cuBLAS, instead of the full toolkit (much faster than 'local' installers).
+          $components = "nvcc_12.6 cudart_12.6 cublas_12.6 cublas_dev_12.6 visual_studio_integration_12.6"
+          Write-Host "Installing CUDA components: $components"
+          Start-Process -FilePath $installerPath -ArgumentList "-s $components" -Wait -NoNewWindow
+
+          $cudaPath = "C:\Program Files\NVIDIA GPU Computing Toolkit\CUDA\v12.6"
+          if (-not (Test-Path "$cudaPath\bin\nvcc.exe")) {
+            throw "CUDA install failed — nvcc.exe not found at $cudaPath\bin"
+          }
+          Write-Host "CUDA installed at: $cudaPath"
+          Add-Content -Path $env:GITHUB_ENV -Value "CUDA_PATH=$cudaPath"
+          Add-Content -Path $env:GITHUB_ENV -Value "CUDA_HOME=$cudaPath"
+          Add-Content -Path $env:GITHUB_PATH -Value "$cudaPath\bin"
 
       - name: Setup MSVC Compiler environment
         uses: ilammy/msvc-dev-cmd@v1
         with:
           arch: x64
-
-      - name: Set CUDA environment variables (safe append)
-        shell: pwsh
-        run: |
-          $cudaPath = "${{ steps.cuda-toolkit.outputs.CUDA_PATH }}"
-          if (-not $cudaPath) {
-            $cudaPath = "C:\Program Files\NVIDIA GPU Computing Toolkit\CUDA\v12.6"
-          }
-          if (-not (Test-Path $cudaPath)) {
-            throw "CUDA_PATH '$cudaPath' does not exist — CUDA toolkit setup may have failed."
-          }
-          Write-Host "Using CUDA_PATH: $cudaPath"
-          Add-Content -Path $env:GITHUB_ENV -Value "CUDA_PATH=$cudaPath"
-          Add-Content -Path $env:GITHUB_ENV -Value "CUDA_HOME=$cudaPath"
-          Add-Content -Path $env:GITHUB_PATH -Value "$cudaPath\bin"
 
       - name: Verify nvcc and environment
         shell: pwsh
