@@ -12,29 +12,44 @@ jobs:
           
       - name: Setup CUDA 12.1
         uses: Jimver/cuda-toolkit@v0.2.17
+        id: cuda-toolkit
         with:
           cuda: '12.1.0'
 
       - name: Setup MSVC Compiler
         uses: ilammy/msvc-dev-cmd@v1
+        with:
+          arch: x64
 
       - name: Set CUDA Environment Variables
         shell: pwsh
         run: |
-          $cudaPath = "C:\Program Files\NVIDIA GPU Computing Toolkit\CUDA\v12.1"
+          $cudaPath = "${{ steps.cuda-toolkit.outputs.CUDA_PATH }}"
+          if (-not $cudaPath) {
+            $cudaPath = "C:\Program Files\NVIDIA GPU Computing Toolkit\CUDA\v12.1"
+          }
           echo "CUDA_PATH=$cudaPath" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
           echo "CUDA_HOME=$cudaPath" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
           echo "$cudaPath\bin" | Out-File -FilePath $env:GITHUB_PATH -Encoding utf8 -Append
+
+      - name: Verify CUDA Installation
+        shell: pwsh
+        run: nvcc --version
+
+      - name: Clean CMake Cache
+        shell: pwsh
+        run: Remove-Item -Recurse -Force -ErrorAction SilentlyContinue "build"
           
       - name: Install Build Dependencies
         run: pip install wheel setuptools cmake scikit-build-core ninja
         
       - name: Compile Wheel (No AVX)
+        shell: pwsh
         env:
-          CMAKE_ARGS: "-DGGML_AVX2=OFF -DGGML_AVX=OFF -DGGML_F16C=OFF -DGGML_FMA=OFF -DGGML_CUDA=on -DGGML_CUDA_ARCHITECTURES=86"
+          CMAKE_ARGS: "-DGGML_AVX2=OFF -DGGML_AVX=OFF -DGGML_F16C=OFF -DGGML_FMA=OFF -DGGML_CUDA=on -DGGML_CUDA_ARCHITECTURES=70;75;80;86"
           FORCE_CMAKE: "1"
           CUDACXX: "C:\\Program Files\\NVIDIA GPU Computing Toolkit\\CUDA\\v12.1\\bin\\nvcc.exe"
-        run: pip wheel llama-cpp-python==0.3.20
+        run: pip wheel llama-cpp-python==0.3.20 --verbose
         
       - name: Upload Finished Wheel
         uses: actions/upload-artifact@v4
